@@ -14,38 +14,75 @@
  * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
  * Ответ будет приходить в поле {result}
  */
- import Api from '../tools/api';
 
- const api = new Api();
+import {
+  __,
+  allPass,
+  andThen,
+  complement,
+  gt,
+  length,
+  lt,
+  modulo,
+  otherwise,
+  partialRight,
+  pipe,
+  prop,
+  tap,
+  test,
+  when,
+} from "ramda";
+import Api from "../tools/api";
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+const api = new Api();
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+  const makeQuery = (number) => ({
+    number,
+    from: 10,
+    to: 2,
+  });
+  const makeUrl = (number) => `https://animals.tech/${number}`;
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+  const isValueValid = allPass([
+    pipe(length, lt(__, 10)),
+    pipe(length, gt(__, 2)),
+    pipe(Number, gt(__, 0)),
+    test(/^[0-9.]*$/),
+  ]);
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+  const workWithValidValue = pipe(
+    Number,
+    Math.round,
+    tap(writeLog),
+    makeQuery,
+    api.get("https://api.tech/numbers/base", __),
+    otherwise(handleError),
+    andThen(
+      pipe(
+        prop("result"),
+        tap(writeLog),
+        length,
+        tap(writeLog),
+        partialRight(Math.pow, [2]),
+        tap(writeLog),
+        modulo(__, 3),
+        tap(writeLog),
+        makeUrl,
+        api.get(__, {}),
+        otherwise(handleError),
+        andThen(pipe(prop("result"), handleSuccess))
+      )
+    )
+  );
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+  const workWithInvalidValue = () => handleError("ValidationError");
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+  pipe(
+    tap(writeLog),
+    tap(when(isValueValid, workWithValidValue)),
+    tap(when(complement(isValueValid), workWithInvalidValue))
+  )(value);
+};
 
 export default processSequence;
